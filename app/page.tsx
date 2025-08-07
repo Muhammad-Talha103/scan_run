@@ -3,11 +3,30 @@
 import { useEffect, useState } from 'react';
 import Script from 'next/script';
 
+
+interface ScannerResult {
+  ScannersList: string[];
+  DefaultIndex: number;
+  ScannedImagesCount: number;
+  ScannedImagesStartingIndex: number;
+  TotalImagesCount: number;
+}
+
+interface ScanReturn {
+  ScannedImagesCount: number;
+  ScannedImagesStartingIndex: number;
+  TotalImagesCount: number;
+}
+
+interface ScanError {
+  Message: string;
+}
+
 interface EnclesoType {
-  OnReady?: (ret: any) => void;
-  OnError?: (err: { Message: string }) => void;
+  OnReady?: (ret: ScannerResult) => void;
+  OnError?: (err: ScanError) => void;
   SetCapabilities: (cap: { Resolution: number; PixelType: number }) => Promise<void>;
-  StartScan: (scannerName: string, showUI: boolean) => Promise<any>;
+  StartScan: (scannerName: string, showUI: boolean) => Promise<ScanReturn>;
   GetImagePreview: (index: number) => Promise<Blob>;
 }
 
@@ -25,7 +44,7 @@ export default function ScanPage() {
     if (!scriptLoaded) return;
 
     const interval = setInterval(() => {
-      if (typeof window !== 'undefined' && (window as any).Encleso) {
+      if (typeof window !== 'undefined' && (window as unknown as { Encleso?: EnclesoType }).Encleso) {
         initEncleso();
         clearInterval(interval);
       }
@@ -35,26 +54,27 @@ export default function ScanPage() {
   }, [scriptLoaded]);
 
   const initEncleso = () => {
-    const Encleso = (window as any).Encleso as EnclesoType;
+ const Encleso = (window as unknown as { Encleso?: EnclesoType }).Encleso;
+
 
     if (!Encleso) {
       setError('Encleso SDK failed to initialize.');
       return;
     }
 
-    Encleso.OnError = function (err: any) {
+    Encleso.OnError = function (err: ScanError) {
       console.error('Scanner Error:', err?.Message || err);
       setScannerConnected(false);
       setScannerName('');
       setError(`Scanner Error: ${err?.Message || 'Unknown error'}`);
     };
 
-    Encleso.OnReady = function (ret: any) {
+    Encleso.OnReady = function (ret: ScannerResult) {
       if (ret?.ScannersList?.length > 0) {
         const defaultScanner = ret.ScannersList[ret.DefaultIndex];
         setScannerConnected(true);
         setScannerName(defaultScanner);
-        setError(null); // Clear any old error
+        setError(null); 
       } else {
         setScannerConnected(false);
         setScannerName('');
@@ -68,7 +88,7 @@ export default function ScanPage() {
     setIsLoading(true);
 
     try {
-      const Encleso = (window as any).Encleso as EnclesoType;
+      const Encleso = (window as unknown as { Encleso?: EnclesoType }).Encleso;
       if (!scannerConnected || !scannerName || !Encleso) {
         setError('Scanner is not connected or Encleso is unavailable.');
         setIsLoading(false);
@@ -102,9 +122,13 @@ export default function ScanPage() {
       } else {
         setError('No pages were scanned.');
       }
-    } catch (err: any) {
+    } catch (err) {
+     const errorMessage =
+        err && typeof err === 'object' && 'Message' in err
+          ? (err as { Message?: string }).Message || 'Failed to scan.'
+          : 'Failed to scan.';
       console.error('Scan failed:', err);
-      setError(err?.Message || 'Failed to scan.');
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
